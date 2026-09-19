@@ -39,3 +39,11 @@ def test_login_invalid_password(client, test_user):
     )
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert "Invalid email or password" in response.json()["error"]["message"]
+
+
+def test_homepage(client):
+    response = client.get("/")
+    assert response.status_code == status.HTTP_200_OK
+    assert "Document Intelligence &" in response.text
+    assert "/docs" in response.text
+
