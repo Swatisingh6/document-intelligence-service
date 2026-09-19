@@ -1,0 +1,104 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: doc_intel_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - DEBUG=False
+      - SECRET_KEY=super-secret-jwt-signing-key-production-change-me
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/doc_intel
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - STORAGE_PATH=/app/storage
+      - MAX_UPLOAD_SIZE_MB=20
+      - TESSERACT_CMD=tesseract
+      - LLM_PROVIDER=none
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build: .
+    container_name: doc_intel_worker
+    restart: always
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -c 4
+    environment:
+      - APP_ENV=production
+      - DEBUG=False
+      - SECRET_KEY=super-secret-jwt-signing-key-production-change-me
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/doc_intel
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - STORAGE_PATH=/app/storage
+      - MAX_UPLOAD_SIZE_MB=20
+      - TESSERACT_CMD=tesseract
+      - LLM_PROVIDER=none
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  flower:
+    build: .
+    container_name: doc_intel_flower
+    restart: always
+    command: celery -A app.core.celery_app.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: doc_intel_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: doc_intel
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: doc_intel_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  storage_data:
